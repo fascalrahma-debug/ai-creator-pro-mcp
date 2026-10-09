@@ -11,7 +11,7 @@ function toolSchema(t){
  return {
   name:t.name,
   title:t.title,
-  description:`AI CREATOR PRO Tool ${String(t.index).padStart(2,"0")}: ${t.title}. Untuk video dan visual, ikuti Master Visual Reference dan pemeriksaan konsistensi bila visual_lock=true; untuk video buat IMAGE PROMPT sebelum VIDEO PROMPT Plain Text dan JSON. Pandu pemula secara interaktif, lalu berikan ${t.deliverables}. ${isVideo(t)?"Jika diminta produksi video AI, sertakan prompt Google Flow per adegan siap salin; format_prompt plain_text/json/keduanya; jangan klaim video sudah dibuat.":""}`,
+  description:`AI CREATOR PRO Tool ${String(t.index).padStart(2,"0")}: ${t.title}. Ikuti standar output khusus jenis tool ini. Untuk video dan visual, ikuti Master Visual Reference dan pemeriksaan konsistensi bila visual_lock=true; untuk video buat IMAGE PROMPT sebelum VIDEO PROMPT Plain Text dan JSON. Pandu pemula secara interaktif, lalu berikan ${t.deliverables}. ${isVideo(t)?"Jika diminta produksi video AI, sertakan prompt Google Flow per adegan siap salin; format_prompt plain_text/json/keduanya; jangan klaim video sudah dibuat.":""}`,
   inputSchema:{type:"object",properties:{
     kebutuhan:{type:"string",description:"Apa yang ingin pengguna buat, revisi, atau pelajari"},
     produk:{type:"string",description:"Nama produk, topik, atau niche (opsional)"},
@@ -40,6 +40,42 @@ function toolSchema(t){
 function response(obj,status=200){return new Response(JSON.stringify(obj),{status,headers:HEADERS});}
 function success(id,result){return response({jsonrpc:"2.0",id,result});}
 function failure(id,code,message){return response({jsonrpc:"2.0",id,error:{code,message}});}
+
+// Standardized per-tool output contract. Existing MCP tool IDs and parameters are unchanged.
+const STANDARD_OUTPUTS={
+ affiliate_video_pro:{kind:"video",sections:["5 hook", "Skrip & storyboard dengan timecode", "Voice-over", "Scene-by-scene Image Prompt → Video Plain Text → Video JSON → Editing", "3 caption & CTA", "Checklist klaim dan Visual Lock"]},
+ video_ai_cinematic:{kind:"video",sections:["Logline dan arahan gaya", "Daftar shot & timecode", "Scene-by-scene Image Prompt → Video Plain Text → Video JSON → Editing", "Kamera, pencahayaan, transisi", "Continuity checklist"]},
+ image_to_video_motion:{kind:"video",sections:["Audit image input dan detail yang terlihat", "Strategi motion aman", "Scene-by-scene Image Prompt → Video Plain Text → Video JSON → Editing", "Kontinuitas frame dan motion artifacts checklist"]},
+ ugc_ads_script_pro:{kind:"video",sections:["5 hook UGC", "Skrip natural tanpa testimoni palsu", "Shot list & durasi", "Scene-by-scene Image Prompt → Video Plain Text → Video JSON → Editing", "CTA dan variasi caption", "Klaim yang harus diverifikasi"]},
+ product_photo_studio:{kind:"image",sections:["Brief & tujuan foto", "Master product reference", "3 konsep komposisi", "3 Image Prompt Plain Text siap salin", "Lighting, kamera, background, props", "Checklist kesetiaan desain produk"]},
+ fashion_model_campaign:{kind:"image",sections:["Konsep lookbook dan target", "Character/outfit identity bible", "3 shot/pose berbeda", "3 Image Prompt Plain Text siap salin", "Styling dan pencahayaan", "Checklist karakter, outfit, dan produk"]},
+ food_commercial_pro:{kind:"video",sections:["Konsep iklan makanan", "Hook & beat visual", "Scene-by-scene Image Prompt → Video Plain Text → Video JSON → Editing", "Close-up, pencahayaan, audio", "CTA dan kontrol klaim bahan/rasa"]},
+ poster_canva_copy_lab:{kind:"design",sections:["Tujuan dan target poster", "Headline & subheadline", "3 alternatif copy", "Layout Canva: hierarki, warna dan tipografi", "Prompt visual opsional", "CTA dan checklist keterbacaan"]},
+ thumbnail_hook_designer:{kind:"design",sections:["Target video", "5 opsi hook teks pendek", "3 konsep thumbnail", "Prompt image per konsep", "Komposisi, kontras, area teks", "Checklist keterbacaan layar kecil"]},
+ ai_voiceover_director:{kind:"audio",sections:["Tujuan, audiens dan durasi", "Skrip voice-over siap rekam", "Arahan emosi, tempo, penekanan, jeda", "Versi alternatif nada", "Panduan TTS / rekaman", "Checklist klaim dan estimasi durasi"]},
+ faceless_channel_factory:{kind:"video",sections:["Niche, format dan sasaran", "5 hook", "Skrip & B-roll timecode", "Scene-by-scene Image Prompt → Video Plain Text → Video JSON → Editing", "VO, teks layar, caption", "Checklist sumber/fakta dan konsistensi"]},
+ storytelling_viral_lab:{kind:"content",sections:["Premis dan audiens", "5 hook cerita", "Outline konflik-resolusi", "Skrip cerita dengan retention beats", "Opsi ending dan caption", "Checklist kebenaran & sensitivitas"]},
+ storyboard_animator:{kind:"video",sections:["Premis dan gaya animasi", "Character bible", "Storyboard & timecode", "Scene-by-scene Image Prompt → Video Plain Text → Video JSON → Editing", "Dialog & sound design", "Character continuity checklist"]},
+ ai_kids_story_studio:{kind:"video",sections:["Rentang usia dan pesan positif", "Cerita ramah anak", "Character bible", "Storyboard & durasi", "Scene-by-scene Image Prompt → Video Plain Text → Video JSON → Editing", "Narasi dan pemeriksaan kesesuaian usia"]},
+ live_shopping_host:{kind:"sales",sections:["Produk/fakta & target", "Rundown sesi live per segmen", "Script opening, demo, Q&A, closing", "Respons keberatan tanpa tekanan", "CTA jujur", "Checklist klaim dan kesiapan live"]},
+ ecommerce_listing_seo:{kind:"sales",sections:["Info produk yang terverifikasi", "3 judul listing SEO", "Bullet fitur faktual & deskripsi", "Keyword relevan tanpa klaim ranking", "FAQ, alt text bila ada foto", "Checklist compliance & informasi belum tersedia"]},
+ whatsapp_sales_assistant:{kind:"sales",sections:["Konteks pelanggan & tujuan", "Template pesan pertama", "Pertanyaan kebutuhan", "Jawaban FAQ/keberatan", "Follow-up sopan & opt-out", "Checklist privasi dan klaim"]},
+ "30_day_content_planner":{kind:"planning",sections:["Tujuan, audiens dan pilar konten", "Kalender 30 hari (hari, ide, format, hook, CTA)", "Batching dan kebutuhan aset", "3 contoh brief siap produksi", "Metrik yang perlu dipantau", "Rencana revisi dan keterbatasan asumsi"]},
+ digital_product_builder:{kind:"business",sections:["Masalah target pembeli", "3 ide produk dan validasi asumsi", "Value proposition dan outline", "Roadmap MVP, aset dan paket", "Copy landing page & FAQ", "Checklist lisensi, uji, akses, dan dukungan pelanggan"]},
+ tiktok_ad_creative_tester:{kind:"video",sections:["Hipotesis uji A/B dan audiens", "3 variasi hook/kreatif", "Skrip dan scene untuk masing-masing variasi", "Scene-by-scene Image Prompt → Video Plain Text → Video JSON → Editing bila diminta", "Metrik dan tabel hasil kosong", "Aturan evaluasi tanpa angka fiktif"]}
+};
+function standardGuide(t,a){
+ const cfg=STANDARD_OUTPUTS[t.name];
+ if(!cfg)return "";
+ let msg="\n\n📋 STANDAR OUTPUT RESMI — "+t.title+" ["+cfg.kind+"]:\n";
+ cfg.sections.forEach((sec,i)=>msg+=(i+1)+". "+sec+"\n");
+ msg+="Gunakan heading yang jelas, format siap salin, dan hanya bagian yang relevan. Setiap output harus sesuai tool ini; jangan paksa hook/storyboard/JSON video pada tool nonvideo. Jika pengguna meminta hasil lebih ringkas, prioritaskan bagian yang terpakai dan tawarkan bagian lainnya.\n";
+ if(cfg.kind==="video")msg+="Untuk scene, pertahankan urutan A Image Prompt Plain Text, B Video Prompt Plain Text, C Video JSON Advanced (sesuai format_prompt), D narasi/transisi/editing. Prioritaskan referensi yang disediakan; jika tidak ada, tandai placeholder, bukan fakta. Visual Lock adalah instruksi konsistensi + pemeriksaan manual, bukan kontrol piksel otomatis.\n";
+ if(cfg.kind==="image")msg+="Prompt gambar ditulis bahasa Inggris dalam blok kode tersendiri. Untuk produk/karakter, detail harus mengikuti foto referensi; tanpa foto, jangan mengarang identitas produk. Jangan otomatis membuat prompt video kecuali diminta pengguna.\n";
+ if(["sales","planning","business","content","audio","design"].includes(cfg.kind))msg+="Gunakan tabel atau draft praktis seperlunya; jangan menyatakan metrik, penjualan, testimoni, ataupun performa sebagai fakta yang telah terbukti tanpa data.\n";
+ return msg;
+}
+
 function contentFor(t,a){
  const entries=[["Kebutuhan",a.kebutuhan],["Produk atau topik",a.produk],["Fakta terverifikasi",a.fakta_produk],["Audiens",a.audiens],["Platform",a.platform],["Gaya",a.gaya],["Durasi",a.durasi],["Jumlah adegan",a.jumlah_adegan],["Prompt gambar",a.prompt_gambar],["Konsistensi visual",a.konsistensi_visual],["Visual Lock",a.visual_lock],["Mode referensi",a.reference_mode],["Lock produk",a.lock_product],["Lock karakter",a.lock_character],["Lock outfit",a.lock_outfit],["Lock lingkungan",a.lock_environment],["Consistency check",a.consistency_check],["Aspek rasio",a.aspect_ratio],["Referensi visual",a.referensi_visual]]
  .filter(([key,val])=>val!==undefined&&val!==null&&String(val).trim()!=="").map(([key,val])=>`- ${key}: ${String(val)}`).join("\n");
@@ -70,22 +106,23 @@ function contentFor(t,a){
  guide+=`Durasi total video bagi secara wajar sesuai jumlah adegan; durasi hasil generasi bergantung pengaturan Google Flow yang tersedia dan klip bisa dipangkas saat editing. Setiap prompt scene harus lengkap dan dapat dipakai sendiri.\n`;
  guide+=`Tambahkan langkah: buka https://labs.google/fx/tools/flow , pilih mode video yang tersedia (Text to Video atau Frames/Ingredients jika didukung), tempel prompt adegan, pilih parameter yang tersedia, generate masing-masing, periksa hasil, rangkai klip dan masukkan voice-over/caption menggunakan editor. Jangan menjanjikan durasi/fitur tertentu, model dan akses dapat berbeda. Jangan mengklaim AI CREATOR PRO/Plugin langsung membuat file video.\n`;
  }else{
- guide+=`\nJika pengguna meminta video untuk topik ini, bantu dengan storyboard dan prompt Google Flow opsional, pisahkan tiap adegan menjadi blok kode siap salin, tanpa mengklaim output video langsung.\n`;
+ guide+=`\nUntuk tool nonvideo, fokus pada keluaran utama yang sesuai fungsinya. Hanya bila pengguna secara eksplisit meminta tambahan video, berikan storyboard dan prompt Google Flow sebagai output opsional. Jangan mengklaim video sudah dibuat.\n`;
  }
+ guide+=standardGuide(t,a);
  return guide;
 }
 export default {
  async fetch(request){
   const url=new URL(request.url);
   if(request.method==="OPTIONS")return new Response(null,{status:204,headers:HEADERS});
-  if(url.pathname==="/")return response({service:"AI CREATOR PRO MCP",status:"online",endpoint:"/mcp",tools:catalog.length,version:"3.1"});
+  if(url.pathname==="/")return response({service:"AI CREATOR PRO MCP",status:"online",endpoint:"/mcp",tools:catalog.length,version:"3.2"});
   if(url.pathname!=="/mcp")return response({error:"Not found"},404);
   if(request.method==="GET")return new Response("MCP endpoint expects POST JSON-RPC.",{status:405,headers:{...HEADERS,Allow:"POST, OPTIONS"}});
   if(request.method!=="POST")return response({error:"Method not allowed"},405);
   let body;try{body=await request.json()}catch{return failure(null,-32700,"Invalid JSON")}
   if(!body||body.jsonrpc!=="2.0"||typeof body.method!=="string")return failure(body?.id??null,-32600,"Invalid Request");
   if(body.id===undefined)return new Response(null,{status:202,headers:HEADERS});
-  if(body.method==="initialize")return success(body.id,{protocolVersion:"2025-03-26",capabilities:{tools:{listChanged:false}},serverInfo:{name:"ai-creator-pro-mcp",version:"3.1.0"}});
+  if(body.method==="initialize")return success(body.id,{protocolVersion:"2025-03-26",capabilities:{tools:{listChanged:false}},serverInfo:{name:"ai-creator-pro-mcp",version:"3.2.0"}});
   if(body.method==="ping")return success(body.id,{});
   if(body.method==="tools/list")return success(body.id,{tools:catalog.map(toolSchema)});
   if(body.method==="tools/call"){
