@@ -10,7 +10,7 @@ function toolSchema(t){
  return {
   name:t.name,
   title:t.title,
-  description:`AI CREATOR PRO Tool ${String(t.index).padStart(2,"0")}: ${t.title}. Pandu pemula secara interaktif, lalu berikan ${t.deliverables}. ${isVideo(t)?"Jika diminta produksi video AI, sertakan prompt Google Flow per adegan yang siap disalin; jangan klaim video sudah dibuat.":""}`,
+  description:`AI CREATOR PRO Tool ${String(t.index).padStart(2,"0")}: ${t.title}. Pandu pemula secara interaktif, lalu berikan ${t.deliverables}. ${isVideo(t)?"Jika diminta produksi video AI, sertakan prompt Google Flow per adegan siap salin; format_prompt plain_text/json/keduanya; jangan klaim video sudah dibuat.":""}`,
   inputSchema:{type:"object",properties:{
     kebutuhan:{type:"string",description:"Apa yang ingin pengguna buat, revisi, atau pelajari"},
     produk:{type:"string",description:"Nama produk, topik, atau niche (opsional)"},
@@ -21,7 +21,8 @@ function toolSchema(t){
     durasi:{type:"string",description:"Durasi video/scene"},
     jumlah_adegan:{type:"integer",minimum:1,maximum:20,description:"Jumlah adegan jika relevan"},
     mode_google_flow:{type:"boolean",description:"True bila pengguna ingin prompt Google Flow yang siap salin untuk video"},
-    referensi_visual:{type:"string",description:"Deskripsi gambar/karakter/produk asli sebagai acuan, bila ada"}
+    referensi_visual:{type:"string",description:"Deskripsi gambar/karakter/produk asli sebagai acuan, bila ada"},
+    format_prompt:{type:"string",enum:["plain_text","json","keduanya"],description:"Format output prompt video: plain_text (default), json, atau keduanya"}
   },required:["kebutuhan"],additionalProperties:false}
  };
 }
@@ -42,6 +43,10 @@ function contentFor(t,a){
  guide+=`3. Narasi/dialog dan teks layar dalam Bahasa Indonesia DI LUAR blok prompt, agar mudah dipasang saat editing.\n`;
  guide+=`4. Negative guidance yang praktis dan relevan, jika perlu; jangan membuat perintah yang tidak didukung model.\n`;
  guide+=`Jika sumber foto tersedia, berikan variasi Image-to-Video/Frames mode dengan instruksi menjaga logo, bentuk dan warna produk; jelaskan bahwa kesetiaan visual tidak dijamin. Jika tidak ada sumber foto, jangan mengarang detail visual produk. Buat prompt pendek tetapi spesifik dan bisa langsung disalin SATU PER ADEGAN.\n`;
+ const fmt=["plain_text","json","keduanya"].includes(a.format_prompt)?a.format_prompt:"plain_text";
+ guide+=`\nFORMAT PROMPT VIDEO: ${fmt}. ${fmt==="plain_text"?"Utamakan satu blok kode text per adegan untuk salin-tempel ke Google Flow.":fmt==="json"?"Utamakan satu blok kode json per adegan sebagai catatan produksi terstruktur. Ingat JSON dalam Google Flow diperlakukan sebagai teks, bukan API resmi.":"Buat dua blok kode per adegan: pertama text siap tempel ke Google Flow, lalu json sebagai dokumentasi advanced. Jangan gabungkan 4 adegan dalam satu blok."}\n`;
+ if(fmt!=="plain_text") guide+=`Untuk JSON gunakan objek valid dengan field scene, subject, action, setting, camera, lighting, visual_style, aspect_ratio, continuity, duration_guidance. Jangan memasukkan informasi yang belum diketahui. Pastikan tidak ada koma trailing, dan jangan klaim JSON menjadi kontrol native Google Flow.\n`;
+ guide+=`Durasi total video bagi secara wajar sesuai jumlah adegan; durasi hasil generasi bergantung pengaturan Google Flow yang tersedia dan klip bisa dipangkas saat editing. Setiap prompt scene harus lengkap dan dapat dipakai sendiri.\n`;
  guide+=`Tambahkan langkah: buka https://labs.google/fx/tools/flow , pilih mode video yang tersedia (Text to Video atau Frames/Ingredients jika didukung), tempel prompt adegan, pilih parameter yang tersedia, generate masing-masing, periksa hasil, rangkai klip dan masukkan voice-over/caption menggunakan editor. Jangan menjanjikan durasi/fitur tertentu, model dan akses dapat berbeda. Jangan mengklaim AI CREATOR PRO/Plugin langsung membuat file video.\n`;
  }else{
  guide+=`\nJika pengguna meminta video untuk topik ini, bantu dengan storyboard dan prompt Google Flow opsional, pisahkan tiap adegan menjadi blok kode siap salin, tanpa mengklaim output video langsung.\n`;
@@ -52,14 +57,14 @@ export default {
  async fetch(request){
   const url=new URL(request.url);
   if(request.method==="OPTIONS")return new Response(null,{status:204,headers:HEADERS});
-  if(url.pathname==="/")return response({service:"AI CREATOR PRO MCP",status:"online",endpoint:"/mcp",tools:catalog.length,version:"2.0"});
+  if(url.pathname==="/")return response({service:"AI CREATOR PRO MCP",status:"online",endpoint:"/mcp",tools:catalog.length,version:"2.1"});
   if(url.pathname!=="/mcp")return response({error:"Not found"},404);
   if(request.method==="GET")return new Response("MCP endpoint expects POST JSON-RPC.",{status:405,headers:{...HEADERS,Allow:"POST, OPTIONS"}});
   if(request.method!=="POST")return response({error:"Method not allowed"},405);
   let body;try{body=await request.json()}catch{return failure(null,-32700,"Invalid JSON")}
   if(!body||body.jsonrpc!=="2.0"||typeof body.method!=="string")return failure(body?.id??null,-32600,"Invalid Request");
   if(body.id===undefined)return new Response(null,{status:202,headers:HEADERS});
-  if(body.method==="initialize")return success(body.id,{protocolVersion:"2025-03-26",capabilities:{tools:{listChanged:false}},serverInfo:{name:"ai-creator-pro-mcp",version:"2.0.0"}});
+  if(body.method==="initialize")return success(body.id,{protocolVersion:"2025-03-26",capabilities:{tools:{listChanged:false}},serverInfo:{name:"ai-creator-pro-mcp",version:"2.1.0"}});
   if(body.method==="ping")return success(body.id,{});
   if(body.method==="tools/list")return success(body.id,{tools:catalog.map(toolSchema)});
   if(body.method==="tools/call"){
